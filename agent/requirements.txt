@@ -1,0 +1,4 @@
+google-genai
+mcp
+openai
+python-dotenv

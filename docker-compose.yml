@@ -1,0 +1,17 @@
+services:
+  agent:
+    build: ./agent
+    command: ["python", "agent.py"]
+    #depends_on:
+    #  news_tools:
+    #    condition: service_healthy
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    #volumes:
+    #  - ./agent:/app
+
+  news_tools:
+    build: ./tools/news
+    #ports:
+    #  - "8000:8000"
