@@ -1,17 +1,13 @@
 services:
   agent:
-    build: ./agent
-    command: ["python", "agent.py"]
-    #depends_on:
-    #  news_tools:
-    #    condition: service_healthy
+    build: ./client
+    #command: ["python", "./agent/agent.py"]
+    command: ["uvicorn", "main:app", "--no-access-log", "--host", "0.0.0.0", "--port", "80"]
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-    #volumes:
-    #  - ./agent:/app
+    ports:
+      - 80:80
 
   news_tools:
     build: ./tools/news
-    #ports:
-    #  - "8000:8000"

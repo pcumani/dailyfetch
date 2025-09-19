@@ -120,6 +120,11 @@ func fetchNews(ctx context.Context, req *mcp.CallToolRequest, input NewsInput) (
 	return nil, map[string]any{"results": results}, nil
 }
 
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
+}
+
 func main() {
 	flag.Parse()
 
@@ -141,11 +146,16 @@ func main() {
 
 	handlerWithLogging := loggingHandler(handler)
 
+	// Create a mux to handle /health and MCP endpoints
+	mux := http.NewServeMux()
+	mux.Handle("/health", http.HandlerFunc(healthHandler))
+	mux.Handle("/", handlerWithLogging)
+
 	log.Printf("MCP server listening on %s", url)
 	log.Printf("Available tool: news_fetcher (Sources: 'hn', 'reddit')")
 
 	// Start the HTTP server with logging handler.
-	if err := http.ListenAndServe(url, handlerWithLogging); err != nil {
+	if err := http.ListenAndServe(url, mux); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
 

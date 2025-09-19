@@ -1,6 +1,6 @@
 
 <p align="center">
-    <img src="./assets/logo.png" alt="Cucinabot logo" width="300">
+    <img src="./assets/logo.png" alt="Dailyfetch logo" width="1000">
 </p>
 
 # DailyFetch
