@@ -1,4 +1,5 @@
 import asyncio
+import os
 import logging
 from typing import Optional, List, Union
 from datetime import timedelta
@@ -23,42 +24,22 @@ class MCPClient:
         self.exit_stack = AsyncExitStack()
         self.model = None
         self.server_url = server_url
-        self._client_ctx = streamablehttp_client(
-            url=self.server_url,
-            timeout=timedelta(seconds=10),
-        )
 
-    def init_model(self, model: str = 'GOOGLE'):
-        self.model = GoogleModel() if model.upper() == "GOOGLE" else OpenAIModel()
-    
-    async def connect_to_server(self):
-        """Connect to an MCP server via HTTP
-        """
-        logging.info(f"Connecting to server: {self.server_url}")
-
-        self._client_ctx = streamablehttp_client(
-            url=self.server_url,
-            timeout=timedelta(seconds=10),
-        )
-
-        self._client = await self._client_ctx.__aenter__()
-        read_stream, write_stream, _ = self._client
-        self.session = ClientSession(read_stream, write_stream)
-        logging.info(f"Initialize connection")
-        await self.session.initialize()
-        logging.info(f"Connected to MCP server at {self.server_url}")
-
-    async def close(self):
-        if hasattr(self, '_client_ctx'):
-            await self._client_ctx.__aexit__(None, None, None)
-        self.session = None
+    def init_model(self, model: str = 'GOOGLE', api_key: Optional[str]=None):
+        if model.upper() == "GOOGLE":
+            api_key = os.getenv("GOOGLE_API_KEY") if api_key is None else api_key
+            self.model = GoogleModel(model="gemini-2.5-flash", api_key=api_key)
+        else:
+            api_key = os.getenv("OPENAI_API_KEY") if api_key is None else api_key
+            OpenAIModel(model="gpt-4o-mini", api_key=api_key)
             
     async def list_tools(self):
         """List available tools from the MCP server."""
-        #if not self.session:
-        #    raise RuntimeError("Session not initialized. Call connect_to_server() first.")
 
-        async with self._client_ctx as (read_stream, write_stream, _):
+        async with streamablehttp_client(
+            url=self.server_url,
+            timeout=timedelta(seconds=10),
+        ) as (read_stream, write_stream, _):
             async with ClientSession(read_stream, write_stream) as session:
                 self.session = session
                 await session.initialize()
@@ -82,7 +63,10 @@ class MCPClient:
                             news_sources: Union[List[str], str, None]=['reddit']):
         """Process incoming query"""  
 
-        async with self._client_ctx as (read_stream, write_stream, _):
+        async with streamablehttp_client(
+            url=self.server_url,
+            timeout=timedelta(seconds=10),
+        ) as (read_stream, write_stream, _):
             async with ClientSession(read_stream, write_stream) as session:
                 self.session = session
                 await session.initialize()
@@ -99,8 +83,8 @@ class MCPClient:
         if len(result) == 0:
             logging.warning("No valid news results to summarize.")
             return "No valid news results to summarize."
-        elif len([x for x in result if not (isinstance(x['data'], str) and x['data'].startswith('Error:'))]) == 0:
-            errors = [x for x in result if isinstance(x['data'], str) and x['data'].startswith('Error:')]
+        elif len([x for x in result if not (isinstance(x['data'], str) and x['data'].startswith('Error'))]) == 0:
+            errors = [x for x in result if isinstance(x['data'], str) and x['data'].startswith('Error')]
             logging.error(f"Error in news results: {errors}")
             return f"ERROR in news results: {errors}"
 
@@ -130,7 +114,6 @@ async def main():
     client.init_model('GOOGLE')
     logging.info("Starting MCP Client...")
     
-    #await client.connect_to_server()
     await client.process_query()
     
 

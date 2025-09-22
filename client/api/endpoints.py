@@ -1,8 +1,8 @@
 import logging
 import requests
-from typing import Annotated, Union, List, Literal, Dict
+from typing import Annotated, Union, List, Literal, Optional
 from fastapi import APIRouter, Query, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from agent.agent import MCPClient
 
@@ -20,6 +20,18 @@ class ListToolsResponse(BaseModel):
     model: str
     tools: List[AgentTool]
 
+class ModelConfig(BaseModel):
+    model: Literal["GOOGLE", "OPENAI"] = Field(
+        default="GOOGLE",
+        title="Inference provider",
+        description="Inference provider for the LLM model to be used. Can be one of GOOGLE or OPENAI"
+    )
+    api_key: Optional[str] = Field(
+        default=None,
+        title="API key",
+        description="API key to be used to access the model"
+    )
+
 @agent_router.get("/health")
 async def healthcheck() -> str:
     try:
@@ -34,16 +46,18 @@ async def healthcheck() -> str:
                             detail=f"Server responded with status: {response.status_code} {response.content}")
 
 @agent_router.post("/set_model", status_code=201)
-async def start_client(model: Annotated[Literal['GOOGLE', 'OPENAI'] | None, Query(title="Inference provider",
-            description="Inference provider for the LLM model to be used. Can be one of GOOGLE or OPENAI")] = "GOOGLE"):
+async def start_client(config: ModelConfig):
         global client
-        client.init_model(model=model)
+        client.init_model(model=config.model, api_key=config.api_key)
 
 @agent_router.get("/list_model_tools")
 async def list_tools() -> ListToolsResponse:
     global client
     if client.model is None:
-        client.init_model(model='GOOGLE')
+        try:
+            client.init_model(model='GOOGLE')
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Error instantiating the model, please use the set_model endpoint: {e}")
 
     try:
         tools = await client.list_tools()
@@ -58,11 +72,14 @@ async def list_tools() -> ListToolsResponse:
 async def start_client(news_categories: Annotated[Union[List[str], str, None], Query(title="Categories of news to be searched",
             description="Only news of these categories will be searched. A list of categories can be passed. Can be left blank to look for general news")] = None,
             news_sources: Annotated[Union[List[str], str, None], Query(title="News sources",
-            description="The sources where to find the news. One of '")] = None, 
+            description="The sources where to find the news. One of 'reddit'")] = None, 
             )-> str:
     global client
     if client.model is None:
-        client.init_model(model='GOOGLE')
+        try:
+            client.init_model(model='GOOGLE')
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Error instantiating the model, please use the set_model endpoint: {e}")
 
     try:
         result = await client.process_query(news_categories=news_categories, news_sources=news_sources)

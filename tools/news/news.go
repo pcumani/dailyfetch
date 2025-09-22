@@ -43,21 +43,15 @@ func fetchURL(url, source string, wg *sync.WaitGroup, ch chan<- NewsResult) {
 		body, _ := io.ReadAll(resp.Body)
 		ch <- NewsResult{
 			Source: source,
-			Data:   fmt.Sprintf("Error: HTTP status code %d. %s", resp.StatusCode, string(body)),
+			Data:   fmt.Sprintf("Error HTTP (%d): %s", resp.StatusCode, string(body)),
 		}
 		return
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		ch <- NewsResult{
-			Source: source,
-			Data:   fmt.Sprintf("HTTP error %d: %s", resp.StatusCode, string(body)),
-		}
-		return
-	}
+
 	if len(body) == 0 {
-		ch <- NewsResult{Source: source, Data: "error: empty response body"}
+		ch <- NewsResult{Source: source, Data: "Error: empty response body"}
 		return
 	}
 
@@ -66,7 +60,7 @@ func fetchURL(url, source string, wg *sync.WaitGroup, ch chan<- NewsResult) {
 	case "reddit":
 		filteredArr, err := FilterRedditJSON(body)
 		if err != nil {
-			ch <- NewsResult{Source: source, Data: "error: " + err.Error()}
+			ch <- NewsResult{Source: source, Data: "Error: " + err.Error()}
 			return
 		}
 		filtered = filteredArr

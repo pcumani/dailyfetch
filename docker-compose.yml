@@ -11,3 +11,13 @@ services:
 
   news_tools:
     build: ./tools/news
+
+  frontend:
+    build: 
+      context: .
+      dockerfile: front/Dockerfile
+    command: ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    depends_on:
+      - agent
+    ports:
+      - 8501:8501

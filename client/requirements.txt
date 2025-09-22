@@ -3,4 +3,5 @@ fastapi
 mcp
 openai
 python-dotenv
+streamlit
 uvicorn[standard]
