@@ -90,7 +90,6 @@ class MCPClient:
 
         try:
             summary = await self.model.summarize(text=str(result))
-            logging.info(f"====== Summary: {summary}")
             return summary
         except TypeError as e:
             logging.error(f"ERROR during summarization: {e}")

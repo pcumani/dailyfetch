@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strings"
 
 	"flag"
 	"fmt"
@@ -32,7 +33,22 @@ type NewsInput struct {
 
 func fetchURL(url, source string, wg *sync.WaitGroup, ch chan<- NewsResult) {
 	defer wg.Done()
-	resp, err := http.Get(url)
+
+	// Create the request
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		ch <- NewsResult{Source: source, Data: "Error creating request: " + err.Error()}
+		return
+	}
+
+	// Add User-Agent header if source is reddit to avoid strict limits and 429 errors
+	if strings.Contains(strings.ToLower(source), "reddit.com") {
+		req.Header.Set("User-Agent", "DailyFetch/1.0")
+	}
+
+	// Execute request
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		ch <- NewsResult{Source: source, Data: "Error: " + err.Error()}
 		return

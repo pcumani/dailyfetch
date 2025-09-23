@@ -24,7 +24,7 @@ def fetch_news(model, api_key, sources, categories):
     set_model = requests.post(f"{api_url}/set_model/",json={"model": "GOOGLE" if 'GOOGLE' in model.upper() else "OPENAI", 
                                                             "api_key": api_key if api_key !='' else None})
     if set_model.status_code != 201:
-        st.session_state.fetched_news = f"There was an error while initialising the model: {set_model.text}"
+        st.session_state.fetched_news = f"There was an error while initialising the model:\n {set_model.text}"
     else:
         endpoint = f'{api_url}/summarize_news/?'
         if len(categories)>0:
@@ -34,10 +34,11 @@ def fetch_news(model, api_key, sources, categories):
             endpoint = endpoint + srcs if endpoint.endswith('?') else endpoint + '&' + srcs
         news = requests.post(endpoint)
 
-        if set_model.status_code != 200:
-            st.session_state.fetched_news = f"There was an error summarizing the news: {news.text}"
+        if news.status_code != 200:
+            st.session_state.fetched_news = f"There was an error summarizing the news:  \n {news.text}"
         else:
-            st.session_state.fetched_news = news.text
+            # Newlines not rendered unless preceded by doublespaces https://github.com/streamlit/streamlit/issues/868
+            st.session_state.fetched_news = news.text.replace('\\n', '  \n').strip('"')
 
 _, cent_co,_ = st.columns(3)
 with cent_co:
@@ -59,6 +60,5 @@ with cols[0]:
         st.button("Fetch me some news!", on_click=fetch_news, args=[model, api_key, sources, categories], type="primary")
 
 with cols[1]:
-    t = st.empty()
-    t.write(f'{st.session_state.fetched_news}')
+    st.write(st.session_state.fetched_news)
 
