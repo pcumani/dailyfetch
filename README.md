@@ -5,5 +5,10 @@
 
 # DailyFetch
 
-DailyFetch is an AI-powered news assistant.  
-It uses Python as the agent host, Go MCP tools for data fetching, and runs with cloud APIs (OpenAI, Gemini).  
+DailyFetch is an AI-powered news assistant.
+
+It uses Python as the agent host, Go MCP tools for data fetching, and runs with cloud APIs (OpenAI, Gemini).
+
+<p align="center">
+    <img src="./assets/architecture.png" alt="Dailyfetch architecture" width="1000">
+</p>
