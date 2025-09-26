@@ -15,5 +15,5 @@ class GoogleModel(LLM):
         self.model = model
 
     async def summarize(self, text: str) -> str:
-        response = await self.client.aio.models.generate_content(model=self.model, contents="Summarize the following news article:\n" + text)
+        response = await self.client.aio.models.generate_content(model=self.model, contents="Summarize the following news article. The result must be presented as a bullet point list in a markdown format. Here are the news:\n\n" + text)
         return response.text

@@ -2,17 +2,15 @@ package main
 
 import (
 	"context"
-	"strings"
+	"time"
 
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"sync"
 
-	"github.com/joho/godotenv"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -23,34 +21,35 @@ var (
 )
 
 type NewsResult struct {
-	Source string `json:"source"`
-	Data   any    `json:"data"`
+	Source   string `json:"source"`
+	Category string `json:"category"`
+	Data     any    `json:"data"`
+	Error    string `json:"error"`
 }
 
 type NewsInput struct {
-	Sources []string `json:"sources" jsonschema:"list of sources such as 'hn', 'reddit'"`
+	Sources    []string `json:"sources" jsonschema:"list of sources such as 'newsapi', 'reddit', 'googlenews'"`
+	Categories []string `json:"categories" jsonschema:"list of categories such as 'technology', 'sport', 'general'"`
 }
 
-func fetchURL(url, source string, wg *sync.WaitGroup, ch chan<- NewsResult) {
+func fetchURL(url, source string, category string, wg *sync.WaitGroup, ch chan<- NewsResult) {
 	defer wg.Done()
 
 	// Create the request
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		ch <- NewsResult{Source: source, Data: "Error creating request: " + err.Error()}
+		ch <- NewsResult{Source: source, Category: category, Error: "Error creating request: " + err.Error()}
 		return
 	}
 
-	// Add User-Agent header if source is reddit to avoid strict limits and 429 errors
-	if strings.Contains(strings.ToLower(source), "reddit.com") {
-		req.Header.Set("User-Agent", "DailyFetch/1.0")
-	}
+	// Add User-Agent header to avoid strict limits and 429 errors
+	req.Header.Set("User-Agent", "DailyFetch/1.0")
 
 	// Execute request
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		ch <- NewsResult{Source: source, Data: "Error: " + err.Error()}
+		ch <- NewsResult{Source: source, Category: category, Error: "Error: " + err.Error()}
 		return
 	}
 	defer resp.Body.Close()
@@ -58,8 +57,9 @@ func fetchURL(url, source string, wg *sync.WaitGroup, ch chan<- NewsResult) {
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		ch <- NewsResult{
-			Source: source,
-			Data:   fmt.Sprintf("Error HTTP (%d): %s", resp.StatusCode, string(body)),
+			Source:   source,
+			Category: category,
+			Error:    fmt.Sprintf("Error HTTP (%d): %s", resp.StatusCode, string(body)),
 		}
 		return
 	}
@@ -67,7 +67,7 @@ func fetchURL(url, source string, wg *sync.WaitGroup, ch chan<- NewsResult) {
 	body, _ := io.ReadAll(resp.Body)
 
 	if len(body) == 0 {
-		ch <- NewsResult{Source: source, Data: "Error: empty response body"}
+		ch <- NewsResult{Source: source, Category: category, Error: "Error: empty response body"}
 		return
 	}
 
@@ -76,7 +76,21 @@ func fetchURL(url, source string, wg *sync.WaitGroup, ch chan<- NewsResult) {
 	case "reddit":
 		filteredArr, err := FilterRedditJSON(body)
 		if err != nil {
-			ch <- NewsResult{Source: source, Data: "Error: " + err.Error()}
+			ch <- NewsResult{Source: source, Category: category, Error: "Error: " + err.Error()}
+			return
+		}
+		filtered = filteredArr
+	case "googlenews":
+		filteredArr, err := FilterGN(body)
+		if err != nil {
+			ch <- NewsResult{Source: source, Category: category, Error: "Error: " + err.Error()}
+			return
+		}
+		filtered = filteredArr
+	case "guardian":
+		filteredArr, err := FilterGuardian(body)
+		if err != nil {
+			ch <- NewsResult{Source: source, Category: category, Error: "Error: " + err.Error()}
 			return
 		}
 		filtered = filteredArr
@@ -84,7 +98,7 @@ func fetchURL(url, source string, wg *sync.WaitGroup, ch chan<- NewsResult) {
 		filtered = string(body)
 	}
 
-	ch <- NewsResult{Source: source, Data: filtered}
+	ch <- NewsResult{Source: source, Category: category, Data: filtered}
 
 }
 
@@ -94,40 +108,87 @@ func fetchNews(ctx context.Context, req *mcp.CallToolRequest, input NewsInput) (
 	if len(sourcesRaw) == 0 {
 		sourcesRaw = []string{"reddit"} // default
 	}
-	newsAPIKey := os.Getenv("NEWS_API")
+
+	categoriesRaw := input.Categories
+	if len(categoriesRaw) == 0 {
+		categoriesRaw = []string{"general"} // default
+	}
 
 	var wg sync.WaitGroup
-	ch := make(chan NewsResult, len(sourcesRaw))
+	ch := make(chan NewsResult, len(sourcesRaw)*len(categoriesRaw))
 
-	for _, s := range sourcesRaw {
-		src := s
-		wg.Add(1)
-		switch src {
-		case "hn":
-			hnURL := fmt.Sprintf("https://newsapi.org/v2/top-headlines?country=us&category=technology&apiKey=%s", newsAPIKey)
-			go fetchURL(hnURL, "hackernews", &wg, ch)
-		case "reddit":
-			go fetchURL("https://www.reddit.com/r/technology/top.json?limit=5", "reddit", &wg, ch)
-		default:
-			wg.Done()
+	// Launch one goroutine per (category, source) combination
+	for i, cat := range categoriesRaw {
+
+		for _, src := range sourcesRaw {
+			wg.Add(1)
+			switch src {
+			case "guardian":
+				var gURL string
+				switch cat {
+				case "entertainment":
+					gURL = "https://www.theguardian.com/uk/culture/rss"
+				case "general":
+					gURL = "https://www.theguardian.com/uk/rss"
+				case "science":
+					gURL = "https://www.theguardian.com/science/rss"
+				default:
+					gURL = fmt.Sprintf("https://www.theguardian.com/uk/%s/rss", cat)
+				}
+
+				go fetchURL(gURL, src, cat, &wg, ch)
+			case "reddit":
+				catr := cat
+				switch cat {
+				case "general":
+					catr = "news"
+				case "sport":
+					catr = "sports"
+				}
+
+				redURL := fmt.Sprintf("https://www.reddit.com/r/%s/top.json?limit=5", catr)
+				go fetchURL(redURL, src, cat, &wg, ch)
+			case "googlenews":
+				googURL := fmt.Sprintf("https://news.google.com/rss/search?hl=en-US&gl=US&ceid=US-en&q=%s", cat)
+				go fetchURL(googURL, src, cat, &wg, ch)
+			default:
+				wg.Done()
+			}
+		}
+
+		// wait some time before next category (skip after last one) to not overload APIs
+		if i < len(categoriesRaw)-1 {
+			time.Sleep(1 * time.Second)
 		}
 	}
 
 	wg.Wait()
 	close(ch)
 
-	results := []NewsResult{}
+	// resultsMap: category → source → NewsResult
+	resultsMap := make(map[string]map[string]NewsResult)
+
 	for res := range ch {
-		results = append(results, res)
+		if _, ok := resultsMap[res.Category]; !ok {
+			resultsMap[res.Category] = make(map[string]NewsResult)
+		}
+		resultsMap[res.Category][res.Source] = res
 	}
 
 	// Print each NewsResult
-	for _, r := range results {
-		fmt.Printf("Source: %s - Data: %v\n\n", r.Source, fmt.Sprint(r.Data)[:50])
+	for cat, sources := range resultsMap {
+		fmt.Printf("Category: %s\n", cat)
+		for src, res := range sources {
+			if res.Data == nil {
+				fmt.Printf(" Source: %s - Error: %+v\n", src, res.Error)
+			} else {
+				fmt.Printf(" Source: %s - Data: %v entries\n", src, res.Data)
+			}
+		}
 	}
 
 	// Return as a dictionary/object
-	return nil, map[string]any{"results": results}, nil
+	return nil, map[string]any{"results": resultsMap}, nil
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -137,11 +198,6 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	flag.Parse()
-
-	// Load .env file for NEWS_API
-	if err := godotenv.Load(); err != nil {
-		log.Printf("Warning: .env file not loaded (%v)", err)
-	}
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "news_fetcher"}, nil)
 
@@ -162,7 +218,7 @@ func main() {
 	mux.Handle("/", handlerWithLogging)
 
 	log.Printf("MCP server listening on %s", url)
-	log.Printf("Available tool: news_fetcher (Sources: 'hn', 'reddit')")
+	log.Printf("Available tool: news_fetcher (Sources: 'googlenews', 'guardian' 'reddit', Categories: 'technology', 'business', 'entertainment', 'science', 'sport', 'general')")
 
 	// Start the HTTP server with logging handler.
 	if err := http.ListenAndServe(url, mux); err != nil {

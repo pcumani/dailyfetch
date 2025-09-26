@@ -5,7 +5,7 @@ import (
 )
 
 // Struct to match the fields we want
-type FilteredItem struct {
+type FilteredRedditItem struct {
 	Subreddit           string `json:"subreddit"`
 	Title               string `json:"title"`
 	LinkFlairText       string `json:"link_flair_text"`
@@ -25,16 +25,16 @@ type RedditResponse struct {
 }
 
 // Function: takes raw JSON bytes, returns filtered slice
-func FilterRedditJSON(body []byte) ([]FilteredItem, error) {
+func FilterRedditJSON(body []byte) ([]FilteredRedditItem, error) {
 	var resp RedditResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, err
 	}
 
-	var filtered []FilteredItem
+	var filtered []FilteredRedditItem
 	for _, child := range resp.Data.Children {
 		item := child.Data
-		filtered = append(filtered, FilteredItem{
+		filtered = append(filtered, FilteredRedditItem{
 			Subreddit:           getString(item, "subreddit"),
 			Title:               getString(item, "title"),
 			LinkFlairText:       getString(item, "link_flair_text"),
@@ -49,7 +49,7 @@ func FilterRedditJSON(body []byte) ([]FilteredItem, error) {
 }
 
 // Optional: helper to marshal filtered items to JSON string
-func MarshalFilteredItems(items []FilteredItem) (string, error) {
+func MarshalFilteredItems(items []FilteredRedditItem) (string, error) {
 	out, err := json.MarshalIndent(items, "", "  ")
 	if err != nil {
 		return "", err

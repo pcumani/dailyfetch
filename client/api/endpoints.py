@@ -70,9 +70,10 @@ async def list_tools() -> ListToolsResponse:
 
 @agent_router.post("/summarize_news",  status_code=200)
 async def start_client(news_categories: Annotated[Union[List[str], str, None], Query(title="Categories of news to be searched",
-            description="Only news of these categories will be searched. A list of categories can be passed. Can be left blank to look for general news")] = None,
+            description="Only news of these categories will be searched. A list of categories can be passed. Can be left blank to look for general news. "+
+                                "Possible values: 'technology', 'business', 'entertainment', 'science', 'sport', 'general'")] = 'general',
             news_sources: Annotated[Union[List[str], str, None], Query(title="News sources",
-            description="The sources where to find the news. One of 'reddit'")] = None, 
+            description="The sources where to find the news. One of 'googlenews', 'guardian', 'reddit'")] = 'googlenews', 
             )-> str:
     global client
     if client.model is None:

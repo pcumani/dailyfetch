@@ -58,9 +58,40 @@ class MCPClient:
             logging.info(f"Tool: {tool.name}, Description: {tool.description}, Input Schema: {tool.inputSchema}")
         
         return tool_list
+    
+    async def process_category(self, result: dict)->str:
+        allnews = ''
+        full_errors = ''
+        for source in result:
+            if result[source]['error']!='':
+                # Errors
+                full_errors += f"Category: '{result[source]['category']}', Source '{source}', Errors: {result[source]['error']}\n"
+                logging.warning(f"ERROR category '{result[source]['category']}', source '{source}'. Errors: {result[source]['error']}")
+            elif len(result[source]['data']) == 0:
+                # Empty results
+                logging.warning(f"No valid news results to summarize for category '{result[source]['category']}' and source '{source}'")
+            else:
+                # Correct results
+                format_news = ''
+                for x in result[source]['data']:
+                    format_news += f"Title: {x['title']}\n" if 'description' not in x else f"Title: {x['title']}. Description: {x['description']}\n"
+                allnews += format_news + '\n\n======\n\n'
 
-    async def process_query(self, news_categories: Union[List[str], str, None]=['technology'], 
-                            news_sources: Union[List[str], str, None]=['reddit']):
+        if len(allnews) == 0 and len(full_errors)!=0:
+            return f"ERROR in news results: {full_errors}"
+        elif len(allnews) == 0:
+            return f"No valid news results to summarize"
+
+        try:
+            summary = await self.model.summarize(text=allnews)
+            return summary
+        except TypeError as e:
+            logging.error(f"ERROR during summarization: {e}")
+            raise
+
+
+    async def process_query(self, news_categories: Union[List[str], str, None]=['general'], 
+                            news_sources: Union[List[str], str, None]=['googlenews'])->str:
         """Process incoming query"""  
 
         async with streamablehttp_client(
@@ -72,28 +103,31 @@ class MCPClient:
                 await session.initialize()
 
                 result = await self.session.call_tool(name="news_fetcher",
-                    arguments={"sources": news_sources}
+                    arguments={"sources": news_sources if not isinstance(news_sources, str) else [news_sources], 
+                               "categories": news_categories if not isinstance(news_categories, str) else [news_categories]}
                     )
 
         
         result = eval(result.content[0].text.replace('null', 'None'))['results']
-        logging.info(f"Fetched {len(result)} results from Go tool: {str(result)[:100] + '...' if len(str(result)) > 100 else str(result)}")
-        result = [x for x in result if 'data' in x and x['data'] is not None]
 
         if len(result) == 0:
             logging.warning("No valid news results to summarize.")
             return "No valid news results to summarize."
-        elif len([x for x in result if not (isinstance(x['data'], str) and x['data'].startswith('Error'))]) == 0:
-            errors = [x for x in result if isinstance(x['data'], str) and x['data'].startswith('Error')]
-            logging.error(f"Error in news results: {errors}")
-            return f"ERROR in news results: {errors}"
 
-        try:
-            summary = await self.model.summarize(text=str(result))
+        summary = ''
+        errors = ''
+        for category in result:
+            logging.info(f"Fetched {len(result[category])} results from Go tool for category '{category}': {str(result[category])[:100] + '...' if len(str(result[category])) > 100 else str(result[category])}")
+            summary_cat = await self.process_category(result=result[category])
+            if 'ERROR' in summary_cat:
+                errors += f'\n\n**{category.title()}**  \n {summary_cat} \n --- \n'
+            else:
+                summary += f'\n\n**{category.title()}**  \n {summary_cat}\n --- \n'
+        
+        if len(summary) == 0:
+            return f"No valid news results to summarize  \n {errors}"
+        else:
             return summary
-        except TypeError as e:
-            logging.error(f"ERROR during summarization: {e}")
-            raise
 
 async def main():
     import os

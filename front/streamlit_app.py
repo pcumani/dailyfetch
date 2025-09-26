@@ -31,7 +31,7 @@ def fetch_news(model, api_key, sources, categories):
             endpoint += 'news_categories='+'&news_categories='.join(categories)
         if len(sources)>0:
             srcs = 'news_sources='+'&news_sources='.join(sources)
-            endpoint = endpoint + srcs if endpoint.endswith('?') else endpoint + '&' + srcs
+            endpoint = endpoint + srcs if endpoint.endswith('?') else endpoint + '&' + srcs.replace("Google News", "googlenews").replace("The Guardian", "guardian")
         news = requests.post(endpoint)
 
         if news.status_code != 200:
@@ -51,8 +51,9 @@ with cols[0]:
     model = st.selectbox("Which LLM model would you like to use?", ("Google Gemini 2.5-flash", "OpenAI gpt 4o-mini"),)
     api_key = st.text_input("Enter the API key to use the model (if empty the corresponding environment variable will be used)", type="password")
 
-    sources = st.multiselect("From which sources should I retrieve the news?", ["reddit", "hacker news"], default=["reddit"],)
-    categories = st.multiselect("Which type of news are you interested in?", ["technology", "sport", "general"], default=["technology"],)
+    sources = st.multiselect("From which sources should I retrieve the news?", ["reddit", "Google News", "The Guardian"], default=["Google News"],)
+    categories = st.multiselect("Which type of news are you interested in?", ["technology", "business", "entertainment", "science", 
+                                                                              "sport", "general"], default=["general"],)
     left_co, cent_co = st.columns([3,1])
     with cent_co:
         st.button("Clear", on_click=reset_page, type="primary")
